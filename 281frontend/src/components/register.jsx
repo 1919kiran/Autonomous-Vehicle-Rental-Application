@@ -74,7 +74,7 @@ class Register extends Form {
  
         </div>
 
-        <div style={{width: "8px"},{height: "8px"}}>  
+        <div >  
         <img src={companyLogo} />   
         </div>
 
