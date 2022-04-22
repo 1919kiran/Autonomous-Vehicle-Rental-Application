@@ -29,6 +29,9 @@ public class Reservation {
 		this.setreward_points=setreward_points;
 	}
 	
+
+
+	
 	public String getReservation_id() {
 		return reservation_id;
 	}
