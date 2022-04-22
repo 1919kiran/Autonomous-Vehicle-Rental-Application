@@ -54,7 +54,7 @@ class LoginForm extends Form {
           </div>
           </div>
         </div>
-        <div style={{width: "8px"},{heigth: "8px"}}>  
+        <div style={{width: "8px"},{height: "8px"}}>  
         <img src={companyLogo} />   
         </div>
 
