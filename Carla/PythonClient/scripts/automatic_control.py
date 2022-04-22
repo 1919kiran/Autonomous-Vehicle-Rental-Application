@@ -302,7 +302,7 @@ class HUD(object):
         sensor_collection = sensor_db["Sensor"]
         post = {
             "time": time.time_ns(),
-            "Model": "Tesla Model 3",
+            "Model": "Model 3",
             "traffic": TFIC,
             "passengers": random.randint(0, 4),
             "condition": "Good",
@@ -314,7 +314,10 @@ class HUD(object):
             "weather": "sunny",
             "estimated arrival": str(random.randint(1, 30)) + " mins",
             "vehicle": self._info_text,
-            "city": CITY
+            "city": CITY,
+            "car_brand":"TESLA",
+            "vehicle_id":"XVFG-123",
+            "vehicle_license":"VHFJJBGD-7697"
         }
 
         try:
