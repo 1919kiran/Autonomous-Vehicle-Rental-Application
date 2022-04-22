@@ -10,6 +10,10 @@
 
 from __future__ import print_function
 
+import time
+
+from pymongo import MongoClient
+
 import argparse
 import collections
 import datetime
@@ -21,6 +25,7 @@ import random
 import re
 import sys
 import weakref
+import asyncio
 
 try:
     import pygame
@@ -62,6 +67,12 @@ from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=im
 from agents.navigation.roaming_agent import RoamingAgent  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
 
+MONGO_CLIENT = MongoClient(
+    "mongodb+srv://admin:adminuser@281avcloud.cspsm.mongodb.net/SensorData?retryWrites=true&w=majority")
+# MONGO_CLIENT = MongoClient("mongodb+srv://root:root@cluster0.kglve.mongodb.net/cluster0?retryWrites=true&w=majority")
+CITY = random.choice(['San Jose', 'Santa Clara', 'San Francisco'])
+TFIC = random.choice(['Light', 'Medium', 'Heavy'])
+
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -71,7 +82,9 @@ from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-e
 def find_weather_presets():
     """Method to find weather presets"""
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
+
     def name(x): return ' '.join(m.group(0) for m in rgx.finditer(x))
+
     presets = [x for x in dir(carla.WeatherParameters) if re.match('[A-Z].+', x)]
     return [(getattr(carla.WeatherParameters, x), name(x)) for x in presets]
 
@@ -200,7 +213,9 @@ class World(object):
 
 class KeyboardControl(object):
     def __init__(self, world):
-        world.hud.notification("Press 'H' or '?' for helpWARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API.", seconds=4.0)
+        world.hud.notification(
+            "Press 'H' or '?' for helpWARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API.",
+            seconds=4.0)
 
     def parse_events(self):
         for event in pygame.event.get():
@@ -214,6 +229,7 @@ class KeyboardControl(object):
     def _is_quit_shortcut(key):
         """Shortcut for quitting"""
         return (key == K_ESCAPE) or (key == K_q and pygame.key.get_mods() & KMOD_CTRL)
+
 
 # ==============================================================================
 # -- HUD -----------------------------------------------------------------------
@@ -275,13 +291,39 @@ class HUD(object):
             'Map:     % 20s' % world.map.name,
             'Simulation time: % 12s' % datetime.timedelta(seconds=int(self.simulation_time)),
             '',
-            'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(vel.x**2 + vel.y**2 + vel.z**2)),
+            'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)),
             u'Heading:% 16.0f\N{DEGREE SIGN} % 2s' % (transform.rotation.yaw, heading),
             'Location:% 20s' % ('(% 5.1f, % 5.1f)' % (transform.location.x, transform.location.y)),
             'GNSS:% 24s' % ('(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
             'Height:  % 18.0f m' % transform.location.z,
             '']
-        print(self._info_text)
+
+        sensor_db = MONGO_CLIENT["SensorData"]
+        sensor_collection = sensor_db["Sensor"]
+        post = {
+            "time": time.time_ns(),
+            "Model": "Tesla Model 3",
+            "traffic": TFIC,
+            "passengers": random.randint(0, 4),
+            "condition": "Good",
+            "fuel": "NA",
+            "battery": str(random.randint(85, 90)) + "%",
+            "door": "locked",
+            "state": "moving",
+            "temperature": str(random.randint(37, 40)) + "C",
+            "weather": "sunny",
+            "estimated arrival": str(random.randint(1, 30)) + " mins",
+            "vehicle": self._info_text,
+            "city": CITY
+        }
+
+        try:
+            x = sensor_collection.insert_one(post)
+            print("POSTED: ", x)
+        except:
+            print("Some of the sensor information is missed")
+
+        # print(self._info_text)
         if isinstance(control, carla.VehicleControl):
             self._info_text += [
                 ('Throttle:', control.throttle, 0.0, 1.0),
@@ -306,8 +348,9 @@ class HUD(object):
             self._info_text += ['Nearby vehicles:']
 
         def dist(l):
-            return math.sqrt((l.x - transform.location.x)**2 + (l.y - transform.location.y)
-                             ** 2 + (l.z - transform.location.z)**2)
+            return math.sqrt((l.x - transform.location.x) ** 2 + (l.y - transform.location.y)
+                             ** 2 + (l.z - transform.location.z) ** 2)
+
         vehicles = [(dist(x.get_location()), x) for x in vehicles if x.id != world.player.id]
 
         for dist, vehicle in sorted(vehicles):
@@ -368,6 +411,7 @@ class HUD(object):
         self._notifications.render(display)
         self.help.render(display)
 
+
 # ==============================================================================
 # -- FadingText ----------------------------------------------------------------
 # ==============================================================================
@@ -402,6 +446,7 @@ class FadingText(object):
         """Render fading text method"""
         display.blit(self.surface, self.pos)
 
+
 # ==============================================================================
 # -- HelpText ------------------------------------------------------------------
 # ==============================================================================
@@ -433,6 +478,7 @@ class HelpText(object):
         """Render help text method"""
         if self._render:
             display.blit(self.surface, self.pos)
+
 
 # ==============================================================================
 # -- CollisionSensor -----------------------------------------------------------
@@ -477,6 +523,7 @@ class CollisionSensor(object):
         if len(self.history) > 4000:
             self.history.pop(0)
 
+
 # ==============================================================================
 # -- LaneInvasionSensor --------------------------------------------------------
 # ==============================================================================
@@ -507,6 +554,7 @@ class LaneInvasionSensor(object):
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
         self.hud.notification('Crossed line %s' % ' and '.join(text))
+
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -539,6 +587,7 @@ class GnssSensor(object):
             return
         self.lat = event.latitude
         self.lon = event.longitude
+
 
 # ==============================================================================
 # -- CameraManager -------------------------------------------------------------
@@ -601,7 +650,7 @@ class CameraManager(object):
         """Set a sensor"""
         index = index % len(self.sensors)
         needs_respawn = True if self.index is None else (
-            force_respawn or (self.sensors[index][0] != self.sensors[self.index][0]))
+                force_respawn or (self.sensors[index][0] != self.sensors[self.index][0]))
         if needs_respawn:
             if self.sensor is not None:
                 self.sensor.destroy()
@@ -661,6 +710,7 @@ class CameraManager(object):
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
+
 
 # ==============================================================================
 # -- Game Loop ---------------------------------------------------------
@@ -762,6 +812,14 @@ def game_loop(args):
             world.destroy()
 
         pygame.quit()
+
+
+async def sleep():
+    time.sleep(1)
+
+
+async def push_to_db():
+    pass
 
 
 # ==============================================================================
