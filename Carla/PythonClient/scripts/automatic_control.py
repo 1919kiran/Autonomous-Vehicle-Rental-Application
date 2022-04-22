@@ -25,7 +25,7 @@ import random
 import re
 import sys
 import weakref
-import asyncio
+import threading
 
 try:
     import pygame
@@ -298,8 +298,6 @@ class HUD(object):
             'Height:  % 18.0f m' % transform.location.z,
             '']
 
-        sensor_db = MONGO_CLIENT["SensorData"]
-        sensor_collection = sensor_db["Sensor"]
         post = {
             "time": time.time_ns(),
             "Model": "Model 3",
@@ -321,6 +319,8 @@ class HUD(object):
         }
 
         try:
+            sensor_db = MONGO_CLIENT["SensorData"]
+            sensor_collection = sensor_db["Sensor"]
             x = sensor_collection.insert_one(post)
             print("POSTED: ", x)
         except:
