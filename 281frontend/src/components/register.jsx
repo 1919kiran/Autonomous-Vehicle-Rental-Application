@@ -2,7 +2,7 @@ import React from "react";
 import auth from "../services/authService";
 import Joi from "joi-browser";
 import Form from "./common/form";
-import { Redirect } from "react-router";
+import { Navigate } from "react-router";
 import { register } from "../services/userService";
 import companyLogo from './car_sports.png';
 
@@ -84,19 +84,19 @@ class Register extends Form {
     } else {
       if (user && user.isadmin) {
         return (
-          <Redirect
+          <Navigate
             to={{
               pathname: "/dashboard",
             }}
-          ></Redirect>
+          ></Navigate>
         );
       } else {
         return (
-          <Redirect
+          <Navigate
             to={{
               pathname: "/mySchedule",
             }}
-          ></Redirect>
+          ></Navigate>
         );
       }
     }

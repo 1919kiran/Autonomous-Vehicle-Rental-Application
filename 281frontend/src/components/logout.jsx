@@ -1,6 +1,6 @@
 import React, { Component } from "react";
 import auth from "../services/authService";
-import { Redirect } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 
 class Logout extends Component {
   componentDidMount() {
@@ -10,11 +10,11 @@ class Logout extends Component {
       auth.logout();
       window.location = "/";
     } else {
-      <Redirect
+      <Navigate
         to={{
           pathname: "/",
         }}
-      ></Redirect>;
+      ></Navigate>;
     }
   }
 

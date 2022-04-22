@@ -6,7 +6,7 @@
 
 import http from "./httpService";
 import jwtDecode from "jwt-decode";
-import { apiUrl } from "../config.json";
+import * as apiUrl from "../config.json";
 
 const apiEndpoint = apiUrl + "/auth";
 const tokenKey = "token.cloudAV";
@@ -60,3 +60,4 @@ export default {
   getCurrentUser,
   getJwt,
 };
+
