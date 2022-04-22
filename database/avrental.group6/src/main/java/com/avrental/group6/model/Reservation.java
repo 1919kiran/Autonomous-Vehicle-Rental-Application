@@ -19,6 +19,15 @@ public class Reservation {
 	private String end_time;
 	private String payment_type;
 	private float trip_price;
+	private int reward_points;
+
+
+	private int getreward_points(){
+		return reward_points;
+	}
+	private int setreward_points(){
+		this.setreward_points=setreward_points;
+	}
 	
 	public String getReservation_id() {
 		return reservation_id;
