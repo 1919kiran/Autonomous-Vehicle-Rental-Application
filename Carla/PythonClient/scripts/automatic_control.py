@@ -10,6 +10,7 @@
 
 from __future__ import print_function
 
+import string
 import time
 
 from pymongo import MongoClient
@@ -26,6 +27,8 @@ import re
 import sys
 import weakref
 import threading
+from queue import Queue
+import json
 
 try:
     import pygame
@@ -70,8 +73,19 @@ from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-e
 MONGO_CLIENT = MongoClient(
     "mongodb+srv://admin:adminuser@281avcloud.cspsm.mongodb.net/SensorData?retryWrites=true&w=majority")
 # MONGO_CLIENT = MongoClient("mongodb+srv://root:root@cluster0.kglve.mongodb.net/cluster0?retryWrites=true&w=majority")
+
+
+letters = string.ascii_uppercase
 CITY = random.choice(['San Jose', 'Santa Clara', 'San Francisco'])
 TFIC = random.choice(['Light', 'Medium', 'Heavy'])
+fog = random.randint(5,50)
+wetness = random.randint(100,150)
+precipitation = random.randint(1,200)
+license_char = random.choices(letters, k=6)
+license_char = ''.join(license_char)
+license_num = random.randint(1000, 9999)
+
+data_queue = Queue(maxsize=100000000)
 
 
 # ==============================================================================
@@ -126,6 +140,7 @@ class World(object):
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
         self.recording_start = 0
+        self.args = args
 
     def restart(self, args):
         """Restart the world"""
@@ -138,6 +153,11 @@ class World(object):
 
         # Get a random blueprint.
         blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
+        print()
+        for vehicle in self.world.get_blueprint_library().filter(self._actor_filter):
+            if args.car in vehicle.id:
+                blueprint = vehicle
+        print("car selected = ", blueprint)
         blueprint.set_attribute('role_name', 'hero')
         if blueprint.has_attribute('color'):
             color = random.choice(blueprint.get_attribute('color').recommended_values)
@@ -214,7 +234,8 @@ class World(object):
 class KeyboardControl(object):
     def __init__(self, world):
         world.hud.notification(
-            "Press 'H' or '?' for helpWARNING: Version mismatch detected: You are trying to connect to a simulator that might be incompatible with this API.",
+            "Press 'H' or '?' for helpWARNING: Version mismatch detected: You are trying to connect to a simulator "
+            "that might be incompatible with this API.",
             seconds=4.0)
 
     def parse_events(self):
@@ -297,36 +318,40 @@ class HUD(object):
             'GNSS:% 24s' % ('(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
             'Height:  % 18.0f m' % transform.location.z,
             '']
-
-        post = {
-            "time": time.time_ns(),
-            "Model": "Model 3",
-            "traffic": TFIC,
-            "passengers": random.randint(0, 4),
-            "condition": "Good",
-            "fuel": "NA",
-            "battery": str(random.randint(85, 90)) + "%",
-            "door": "locked",
-            "state": "moving",
-            "temperature": str(random.randint(37, 40)) + "C",
-            "weather": "sunny",
-            "estimated arrival": str(random.randint(1, 30)) + " mins",
-            "vehicle": self._info_text,
-            "city": CITY,
-            "car_brand":"TESLA",
-            "vehicle_id":"XVFG-123",
-            "vehicle_license":"VHFJJBGD-7697"
-        }
-
         try:
-            sensor_db = MONGO_CLIENT["SensorData"]
-            sensor_collection = sensor_db["Sensor"]
-            x = sensor_collection.insert_one(post)
-            print("POSTED: ", x)
-        except:
-            print("Some of the sensor information is missed")
+            spawn_point = world.player.get_transform()
+            sensor_data = {
+                "world_details": {
+                    "vehicles": str(len(vehicles)),
+                    "time": time.time()
+                },
+                "weather": {
+                    "precipitation": precipitation,
+                    "fog": fog,
+                    "wetness": wetness,
+                },
+                "vehicle_details": {
+                    "vehicle_id": world.args.car,
+                    "vehicle_license": str(license_char) + "-" + str(license_num),
+                    "condition": "Good",
+                    "speed": '%1.0f km/h' % (3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)),
+                    "GNSS": '(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon),
+                    "location": '(%5.1f, %5.1f)' % (transform.location.x, transform.location.y),
+                    "heading": u'%1.0f\N{DEGREE SIGN} % 2s' % (transform.rotation.yaw, heading),
+                    "throttle": control.throttle,
+                    "steer": control.steer,
+                    "reverse": control.reverse,
+                    "gear": "%s" % {-1: 'R', 0: 'N'}.get(control.gear, control.gear)
+                },
+                "trip_details":{
+                    "trip_cost": 0,
+                    "trip_distance": 0
+                }
+            }
+            data_queue.put(sensor_data)
+        except Exception as e:
+            print(e)
 
-        # print(self._info_text)
         if isinstance(control, carla.VehicleControl):
             self._info_text += [
                 ('Throttle:', control.throttle, 0.0, 1.0),
@@ -813,16 +838,7 @@ def game_loop(args):
     finally:
         if world is not None:
             world.destroy()
-
         pygame.quit()
-
-
-async def sleep():
-    time.sleep(1)
-
-
-async def push_to_db():
-    pass
 
 
 # ==============================================================================
@@ -832,7 +848,6 @@ async def push_to_db():
 
 def main():
     """Main method"""
-
     argparser = argparse.ArgumentParser(
         description='CARLA Automatic Control Client')
     argparser.add_argument(
@@ -885,6 +900,11 @@ def main():
         help='Set seed for repeating executions (default: None)',
         default=None,
         type=int)
+    argparser.add_argument(
+        '--car',
+        help='Set the car blueprint',
+        default='vehicle.tesla.model3',
+        type=str)
 
     args = argparser.parse_args()
 
@@ -898,11 +918,42 @@ def main():
     print(__doc__)
 
     try:
+        print(args)
         game_loop(args)
 
     except KeyboardInterrupt:
         print('\nCancelled by user. Bye!')
 
 
+def push_to_db():
+    MONGO_CLIENT = MongoClient(
+        "mongodb+srv://admin:adminuser@281avcloud.cspsm.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
+    sensor_db = MONGO_CLIENT["SensorData"]
+    sensor_collection = sensor_db["Sensor"]
+    time.sleep(5)
+    counter = 0
+    dist = 0
+    while True:
+        try:
+            counter += 1
+            if data_queue.empty():
+                return
+            sensor_data = data_queue.get()
+            if counter % 3 == 0:
+                d = sensor_data.get("trip_details")
+                dist += random.randint(1, 9)
+                d["trip_distance"] = dist
+                d["trip_cost"] = 0.13*dist
+                sensor_data["trip_details"] = d
+                sensor_collection.insert_one(sensor_data)
+                print("posting data to MongoDB...")
+        except Exception as e:
+            print("Error occurred while posting sensor data", e)
+    print("Successfully posted the sensor data to MongoDB")
+
+
 if __name__ == '__main__':
-    main()
+    t1 = threading.Thread(target=main)
+    t2 = threading.Thread(target=push_to_db)
+    t1.start()
+    t2.start()

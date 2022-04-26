@@ -1,5 +1,0 @@
-future
-pygame
-matplotlib
-open3d
-Pillow
