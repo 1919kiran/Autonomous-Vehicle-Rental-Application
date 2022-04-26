@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+</head>
+<body>
+    <br>
+    <h1>Select a vehicle from the dropdown</h1>
+    <br>
+    <br>
+    <form action="" method="post">
+        <label for="cars">Choose a car:</label>
+        <select id="cars" name="cars">
+            <option value="vehicle.audi.a2">vehicle.audi.a2</option>
+            <option value="vehicle.nissan.micra">vehicle.nissan.micra</option>
+            <option value="vehicle.audi.tt">vehicle.audi.tt</option>
+            <option value="vehicle.mercedes.coupe_2020">vehicle.mercedes.coupe_2020</option>
+            <option value="vehicle.bmw.grandtourer">vehicle.bmw.grandtourer</option>
+            <option value="vehicle.harley-davidson.low_rider">vehicle.harley-davidson.low_rider</option>
+            <option value="vehicle.ford.ambulance">vehicle.ford.ambulance</option>
+            <option value="vehicle.micro.microlino">vehicle.micro.microlino</option>
+            <option value="vehicle.carlamotors.firetruck">vehicle.carlamotors.firetruck</option>
+            <option value="vehicle.carlamotors.carlacola">vehicle.carlamotors.carlacola</option>
+            <option value="vehicle.ford.mustang">vehicle.ford.mustang</option>
+            <option value="vehicle.chevrolet.impala">vehicle.chevrolet.impala</option>
+            <option value="vehicle.lincoln.mkz_2020">vehicle.lincoln.mkz_2020</option>
+            <option value="vehicle.citroen.c3">vehicle.citroen.c3</option>
+            <option value="vehicle.dodge.charger_police">vehicle.dodge.charger_police</option>
+            <option value="vehicle.nissan.patrol">vehicle.nissan.patrol</option>
+            <option value="vehicle.jeep.wrangler_rubicon">vehicle.jeep.wrangler_rubicon</option>
+            <option value="vehicle.mini.cooper_s">vehicle.mini.cooper_s</option>
+            <option value="vehicle.mercedes.coupe">vehicle.mercedes.coupe</option>
+            <option value="vehicle.dodge.charger_2020">vehicle.dodge.charger_2020</option>
+            <option value="vehicle.ford.crown">vehicle.ford.crown</option>
+            <option value="vehicle.seat.leon">vehicle.seat.leon</option>
+            <option value="vehicle.toyota.prius">vehicle.toyota.prius</option>
+            <option value="vehicle.yamaha.yzf">vehicle.yamaha.yzf</option>
+            <option value="vehicle.kawasaki.ninja">vehicle.kawasaki.ninja</option>
+            <option value="vehicle.bh.crossbike">vehicle.bh.crossbike</option>
+            <option value="vehicle.tesla.model3">vehicle.tesla.model3</option>
+            <option value="vehicle.gazelle.omafiets">vehicle.gazelle.omafiets</option>
+            <option value="vehicle.tesla.cybertruck">vehicle.tesla.cybertruck</option>
+            <option value="vehicle.diamondback.century">vehicle.diamondback.century</option>
+            <option value="vehicle.mercedes.sprinter">vehicle.mercedes.sprinter</option>
+            <option value="vehicle.audi.etron">vehicle.audi.etron</option>
+            <option value="vehicle.volkswagen.t2">vehicle.volkswagen.t2</option>
+            <option value="vehicle.lincoln.mkz_2017">vehicle.lincoln.mkz_2017</option>
+            <option value="vehicle.dodge.charger_police_2020">vehicle.dodge.charger_police_2020</option>
+            <option value="vehicle.vespa.zx125">vehicle.vespa.zx125</option>
+            <option value="vehicle.mini.cooper_s_2021">vehicle.mini.cooper_s_2021</option>
+            <option value="vehicle.nissan.patrol_2021">vehicle.nissan.patrol_2021</option>
+            <option value="vehicle.volkswagen.t2_2021">vehicle.volkswagen.t2_2021</option>
+        </select>
+        <input type="submit">
+        {% if error %}
+            <p class="error"><strong>Error:</strong> {{ error }}
+        {% endif %}
+    </form>
+</body>
+</html>
+
