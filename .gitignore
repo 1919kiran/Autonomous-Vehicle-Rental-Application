@@ -1,4 +1,6 @@
-
 .DS_Store
 *.png
-Carla/PythonServer/.idea/workspace.xml
+Carla/PythonServer/.idea/*
+Carla/.idea/*
+Carla/PythonClient/carla/agents/*
+Carla/PythonClient/carla/data/*
