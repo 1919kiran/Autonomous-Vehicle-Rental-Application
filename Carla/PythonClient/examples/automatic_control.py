@@ -146,10 +146,9 @@ class World(object):
         if args.seed is not None:
             random.seed(args.seed)
 
-        # Get a random blueprint.
         blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
-        print(self.world.get_blueprint_library().filter(self._actor_filter))
         for vehicle in self.world.get_blueprint_library().filter(self._actor_filter):
+            print(vehicle.id)
             if args.car in vehicle.id:
                 blueprint = vehicle
         print("car selected = ", blueprint)
@@ -173,7 +172,8 @@ class World(object):
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
             spawn_points = self.map.get_spawn_points()
-            print(self.map.get_spawn_points())
+            for spawn_point in self.map.get_spawn_points():
+                print(spawn_point.location)
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
         # Set up the sensors.
@@ -950,4 +950,4 @@ if __name__ == '__main__':
     t1 = threading.Thread(target=main)
     t2 = threading.Thread(target=push_to_db)
     t1.start()
-    t2.start()
+    # t2.start()
