@@ -172,8 +172,8 @@ class World(object):
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
             spawn_points = self.map.get_spawn_points()
-            for spawn_point in self.map.get_spawn_points():
-                print(spawn_point.location)
+            # for spawn_point in self.map.get_spawn_points():
+                # print(spawn_point.location)
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
         # Set up the sensors.
@@ -255,6 +255,7 @@ class HUD(object):
 
     def __init__(self, width, height):
         """Constructor method"""
+        self.counter = 1
         self.dim = (width, height)
         font = pygame.font.Font(pygame.font.get_default_font(), 20)
         font_name = 'courier' if os.name == 'nt' else 'mono'
@@ -330,8 +331,10 @@ class HUD(object):
             collision,
             '',
             'Number of vehicles: % 8d' % len(vehicles)]
-
+            
+        
         try:
+            self.counter += 1
             spawn_point = world.player.get_transform()
             sensor_data = {
                 "world_details": {
@@ -351,8 +354,8 @@ class HUD(object):
                     "GNSS": '(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon),
                     "location": '(%5.1f, %5.1f)' % (transform.location.x, transform.location.y),
                     "heading": u'%1.0f\N{DEGREE SIGN} % 2s' % (transform.rotation.yaw, heading),
-                    "throttle": control.throttle,
-                    "steer": control.steer,
+                    "throttle": '{0:.2f}' % control.throttle,
+                    "steer": '{0:.2f}' % control.steer,
                     "reverse": control.reverse,
                     "gear": "%s" % {-1: 'R', 0: 'N'}.get(control.gear, control.gear)
                 },
@@ -361,7 +364,8 @@ class HUD(object):
                     "trip_distance": 0
                 }
             }
-            data_queue.put(sensor_data)
+            if self.counter % 10 == 0:
+                data_queue.put(sensor_data)
         except Exception as e:
             print(e)
 
@@ -929,18 +933,15 @@ def push_to_db():
     dist = 0
     while True:
         try:
-            counter += 1
-            if data_queue.empty():
-                return
+            time.sleep(0.1)
             sensor_data = data_queue.get()
-            if counter % 3 == 0:
-                d = sensor_data.get("trip_details")
-                dist += random.randint(1, 9)
-                d["trip_distance"] = dist
-                d["trip_cost"] = 0.13 * dist
-                sensor_data["trip_details"] = d
-                sensor_collection.insert_one(sensor_data)
-                print("posting data to MongoDB...")
+            d = sensor_data.get("trip_details")
+            dist += random.randint(1, 9)
+            d["trip_distance"] = dist
+            d["trip_cost"] = 0.0001 * dist
+            sensor_data["trip_details"] = d
+            sensor_collection.insert_one(sensor_data)
+            print("Posting data to MongoDB...")
         except Exception as e:
             print("Error occurred while posting sensor data", e)
     print("Successfully posted the sensor data to MongoDB")
@@ -950,4 +951,4 @@ if __name__ == '__main__':
     t1 = threading.Thread(target=main)
     t2 = threading.Thread(target=push_to_db)
     t1.start()
-    # t2.start()
+    t2.start()
