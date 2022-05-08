@@ -4,3 +4,4 @@ Carla/PythonServer/.idea/*
 Carla/.idea/*
 Carla/PythonClient/carla/agents/*
 Carla/PythonClient/carla/data/*
+.idea/*
