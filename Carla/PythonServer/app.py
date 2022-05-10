@@ -1,39 +1,43 @@
 import os
-import pymongo
 
-from flask import Flask, render_template, redirect, url_for, request
+from flask import Flask, request, Response
+from flask_cors import CORS
 
 app = Flask(__name__)
 
 
-@app.route('/')
-def hello_world():  # put application's code here
-    return redirect(url_for('select'))
+@app.route('/start_ride', methods=['GET', 'POST'])
+def hello_world():
+    if request.method == 'GET':
+        start_location = request.args.get('startLocation')
+        end_location = request.args.get('endLocation')
+        vehicle = request.args.get('vehicle')
+        payment = request.args.get('payment')
+        os.system(
+            "start cmd /K python C:\carla\av-cloud-rental\Carla\PythonClient\examples\automatic_control.py --car "
+            + '"' + vehicle + '"')
+        print(request.args)
+        data = {
+            "startLocation": start_location,
+            "endLocation": end_location,
+            "vehicle": vehicle
+        }
+        print(data)
+        return data
+
+    app.config['CORS_HEADERS'] = 'Content-Type'
+    return {
+        "start_location": "",
+        "end_location": "",
+        "vehicle": ""
+    }
 
 
-@app.route('/select', methods=['GET', 'POST'])
-def select():
-    error = None
-    if request.method == 'POST':
-        car = request.form.get('cars')
-        os.system("start cmd /K python PythonAPI/examples/automatic_control.py --car " + '"' + car + '"')
-        return render_template('sensor.html', error=error)
-    return render_template('av-select.html', error=error)
-
-
-@app.route('/get_data', methods=['GET', 'POST'])
-def get_data():
-    client = pymongo.MongoClient(
-        "mongodb+srv://admin:adminuser@281avcloud.cspsm.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
-    sensor_db = client["SensorData"]
-    sensor_collection = sensor_db["Sensor"]
-    x = sensor_collection.find()
-    sensor_data = []
-    for i in x:
-        sensor_data.append(i)
-    print()
-    return render_template("sensor.html", sensor_data=sensor_data, error=None)
+@app.route("/hello", methods=['GET'])
+def hello():
+    return "Hello"
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    CORS(app)
+    app.run(host="0.0.0.0", port=5500)

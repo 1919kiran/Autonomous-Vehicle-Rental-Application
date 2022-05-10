@@ -21,6 +21,12 @@ import random
 import re
 import sys
 import weakref
+import string
+import time
+import threading
+
+from queue import Queue
+from pymongo import MongoClient
 
 try:
     import pygame
@@ -40,10 +46,12 @@ except ImportError:
 # -- Find CARLA module ---------------------------------------------------------
 # ==============================================================================
 try:
-    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
-        sys.version_info.major,
-        sys.version_info.minor,
-        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    # sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+    #     sys.version_info.major,
+    #     sys.version_info.minor,
+    #     'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    sys.path.append(glob.glob(
+        'C:\\carla\\av-cloud-rental\\Carla\\PythonClient\\carla\\dist\\carla-0.9.11-py3.7-win-amd64.egg')[0])
 except IndexError:
     pass
 
@@ -62,6 +70,28 @@ from agents.navigation.behavior_agent import BehaviorAgent  # pylint: disable=im
 from agents.navigation.roaming_agent import RoamingAgent  # pylint: disable=import-error
 from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-error
 
+# ==============================================================================
+# -- Global variables/constants ------------------------------------------------
+# ==============================================================================
+global_speed = 0.0
+MONGO_CLIENT = MongoClient(
+    "mongodb+srv://admin:adminuser@281avcloud.cspsm.mongodb.net/SensorData?retryWrites=true&w=majority")
+# MONGO_CLIENT = MongoClient("mongodb+srv://root:root@cluster0.kglve.mongodb.net/cluster0?retryWrites=true&w=majority")
+letters = string.ascii_uppercase
+fog = random.randint(5, 50)
+wetness = random.randint(100, 150)
+precipitation = random.randint(1, 200)
+license_char = random.choices(letters, k=6)
+license_char = ''.join(license_char)
+license_num = random.randint(1000, 9999)
+data_queue = Queue(maxsize=100000000)
+game_thread = None
+io_thread = None
+distance_travelled = 0.0
+cost_accumulated = 10.0
+prev_tick = time.time()
+global_state = ""
+
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -71,7 +101,9 @@ from agents.navigation.basic_agent import BasicAgent  # pylint: disable=import-e
 def find_weather_presets():
     """Method to find weather presets"""
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
+
     def name(x): return ' '.join(m.group(0) for m in rgx.finditer(x))
+
     presets = [x for x in dir(carla.WeatherParameters) if re.match('[A-Z].+', x)]
     return [(getattr(carla.WeatherParameters, x), name(x)) for x in presets]
 
@@ -113,6 +145,7 @@ class World(object):
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
         self.recording_start = 0
+        self.args = args
 
     def restart(self, args):
         """Restart the world"""
@@ -123,8 +156,12 @@ class World(object):
         if args.seed is not None:
             random.seed(args.seed)
 
-        # Get a random blueprint.
         blueprint = random.choice(self.world.get_blueprint_library().filter(self._actor_filter))
+        for vehicle in self.world.get_blueprint_library().filter(self._actor_filter):
+            print(vehicle.id)
+            if args.car in vehicle.id:
+                blueprint = vehicle
+        print("car selected = ", blueprint)
         blueprint.set_attribute('role_name', 'hero')
         if blueprint.has_attribute('color'):
             color = random.choice(blueprint.get_attribute('color').recommended_values)
@@ -145,6 +182,10 @@ class World(object):
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
             spawn_points = self.map.get_spawn_points()
+            # i, j = self.get_maximum_distance_points(spawn_points)
+            for spawn_point in self.map.get_spawn_points():
+                spawn_point.location.x
+                # print(spawn_point.location)
             spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
         # Set up the sensors.
@@ -157,11 +198,42 @@ class World(object):
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
 
+    def get_maximum_distance_points(self, spawn_points):
+        n = len(spawn_points)
+        start = 0
+        end = n - 1
+
+        locations = [[]]
+        for point in spawn_points:
+            loc = []
+            loc[0] = point.location.x
+            loc[1] = point.location.y
+            loc[2] = point.location.z
+            locations.append(loc)
+
+        n = len(locations)
+        maxm = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                if self.dist(locations[i], locations[j]) > maxm:
+                    start = i
+                    end = j
+                maxm = max(maxm, self.dist(locations[i], locations[j]))
+
+        return start, end
+
+    def dist(self, p1, p2):
+        x0 = p1[0] - p2[0]
+        y0 = p1[1] - p2[1]
+        z0 = p1[2] - p2[2]
+        return math.sqrt(x0 * x0 + y0 * y0 + z0 * z0)
+
     def next_weather(self, reverse=False):
         """Get next weather setting"""
         self._weather_index += -1 if reverse else 1
         self._weather_index %= len(self._weather_presets)
         preset = self._weather_presets[self._weather_index]
+        print('Weather: %s' % preset[1])
         self.hud.notification('Weather: %s' % preset[1])
         self.player.get_world().set_weather(preset[0])
 
@@ -215,6 +287,7 @@ class KeyboardControl(object):
         """Shortcut for quitting"""
         return (key == K_ESCAPE) or (key == K_q and pygame.key.get_mods() & KMOD_CTRL)
 
+
 # ==============================================================================
 # -- HUD -----------------------------------------------------------------------
 # ==============================================================================
@@ -225,6 +298,7 @@ class HUD(object):
 
     def __init__(self, width, height):
         """Constructor method"""
+        self.counter = 1
         self.dim = (width, height)
         font = pygame.font.Font(pygame.font.get_default_font(), 20)
         font_name = 'courier' if os.name == 'nt' else 'mono'
@@ -267,6 +341,8 @@ class HUD(object):
         collision = [x / max_col for x in collision]
         vehicles = world.world.get_actors().filter('vehicle.*')
 
+        global global_speed
+        global_speed = 3.6 * math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
         self._info_text = [
             'Server:  % 16.0f FPS' % self.server_fps,
             'Client:  % 16.0f FPS' % clock.get_fps(),
@@ -275,7 +351,7 @@ class HUD(object):
             'Map:     % 20s' % world.map.name,
             'Simulation time: % 12s' % datetime.timedelta(seconds=int(self.simulation_time)),
             '',
-            'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(vel.x**2 + vel.y**2 + vel.z**2)),
+            'Speed:   % 15.0f km/h' % global_speed,
             u'Heading:% 16.0f\N{DEGREE SIGN} % 2s' % (transform.rotation.yaw, heading),
             'Location:% 20s' % ('(% 5.1f, % 5.1f)' % (transform.location.x, transform.location.y)),
             'GNSS:% 24s' % ('(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
@@ -301,12 +377,55 @@ class HUD(object):
             '',
             'Number of vehicles: % 8d' % len(vehicles)]
 
+        try:
+            self.counter += 1
+            spawn_point = world.player.get_transform()
+            state = ""
+            global global_state
+            if global_speed == 0:
+                global_state = "Stopped"
+            print("state = ", global_state)
+            sensor_data = {
+                "world_details": {
+                    "vehicles": str(len(vehicles)),
+                    "time": time.time()
+                },
+                "weather": {
+                    "precipitation": precipitation,
+                    "fog": fog,
+                    "wetness": wetness,
+                },
+                "vehicle_details": {
+                    "vehicle_id": world.args.car,
+                    "vehicle_license": str(license_char) + "-" + str(license_num),
+                    "condition": "Good",
+                    "speed": '%1.0f km/h' % global_speed,
+                    "GNSS": '(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon),
+                    "location": '(%5.1f, %5.1f)' % (transform.location.x, transform.location.y),
+                    "heading": u'%1.0f\N{DEGREE SIGN} % 2s' % (transform.rotation.yaw, heading),
+                    "throttle": '%5.1f' % control.throttle,
+                    "steer": '%5.1f' % control.steer,
+                    "reverse": control.reverse,
+                    "gear": "%s" % {-1: 'R', 0: 'N'}.get(control.gear, control.gear),
+                    "state": global_state
+                },
+                "trip_details": {
+                    "trip_cost": 0,
+                    "trip_distance": 0
+                }
+            }
+            if self.counter % 10 == 0:
+                data_queue.put(sensor_data)
+        except Exception as e:
+            print(e)
+
         if len(vehicles) > 1:
             self._info_text += ['Nearby vehicles:']
 
         def dist(l):
-            return math.sqrt((l.x - transform.location.x)**2 + (l.y - transform.location.y)
-                             ** 2 + (l.z - transform.location.z)**2)
+            return math.sqrt((l.x - transform.location.x) ** 2 + (l.y - transform.location.y)
+                             ** 2 + (l.z - transform.location.z) ** 2)
+
         vehicles = [(dist(x.get_location()), x) for x in vehicles if x.id != world.player.id]
 
         for dist, vehicle in sorted(vehicles):
@@ -367,6 +486,7 @@ class HUD(object):
         self._notifications.render(display)
         self.help.render(display)
 
+
 # ==============================================================================
 # -- FadingText ----------------------------------------------------------------
 # ==============================================================================
@@ -401,6 +521,7 @@ class FadingText(object):
         """Render fading text method"""
         display.blit(self.surface, self.pos)
 
+
 # ==============================================================================
 # -- HelpText ------------------------------------------------------------------
 # ==============================================================================
@@ -432,6 +553,7 @@ class HelpText(object):
         """Render help text method"""
         if self._render:
             display.blit(self.surface, self.pos)
+
 
 # ==============================================================================
 # -- CollisionSensor -----------------------------------------------------------
@@ -469,12 +591,15 @@ class CollisionSensor(object):
         if not self:
             return
         actor_type = get_actor_display_name(event.other_actor)
+        global global_state
+        global_state = 'Collision with %r' % actor_type
         self.hud.notification('Collision with %r' % actor_type)
         impulse = event.normal_impulse
         intensity = math.sqrt(impulse.x ** 2 + impulse.y ** 2 + impulse.z ** 2)
         self.history.append((event.frame, intensity))
         if len(self.history) > 4000:
             self.history.pop(0)
+
 
 # ==============================================================================
 # -- LaneInvasionSensor --------------------------------------------------------
@@ -505,7 +630,10 @@ class LaneInvasionSensor(object):
             return
         lane_types = set(x.type for x in event.crossed_lane_markings)
         text = ['%r' % str(x).split()[-1] for x in lane_types]
+        global global_state
+        global_state = 'Crossed line %s' % ' and '.join(text)
         self.hud.notification('Crossed line %s' % ' and '.join(text))
+
 
 # ==============================================================================
 # -- GnssSensor --------------------------------------------------------
@@ -538,6 +666,7 @@ class GnssSensor(object):
             return
         self.lat = event.latitude
         self.lon = event.longitude
+
 
 # ==============================================================================
 # -- CameraManager -------------------------------------------------------------
@@ -600,7 +729,7 @@ class CameraManager(object):
         """Set a sensor"""
         index = index % len(self.sensors)
         needs_respawn = True if self.index is None else (
-            force_respawn or (self.sensors[index][0] != self.sensors[self.index][0]))
+                force_respawn or (self.sensors[index][0] != self.sensors[self.index][0]))
         if needs_respawn:
             if self.sensor is not None:
                 self.sensor.destroy()
@@ -660,6 +789,7 @@ class CameraManager(object):
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame)
+
 
 # ==============================================================================
 # -- Game Loop ---------------------------------------------------------
@@ -759,8 +889,12 @@ def game_loop(args):
     finally:
         if world is not None:
             world.destroy()
-
+        print("Exiting the game window...")
         pygame.quit()
+        global cost_accumulated
+        print("Total cost for the trip is: $", format(cost_accumulated, "0.2f"))
+        sys.exit(0)
+        quit()
 
 
 # ==============================================================================
@@ -813,16 +947,21 @@ def main():
         '-b', '--behavior', type=str,
         choices=["cautious", "normal", "aggressive"],
         help='Choose one of the possible agent behaviors (default: normal) ',
-        default='normal')
+        default='aggressive')
     argparser.add_argument("-a", "--agent", type=str,
                            choices=["Behavior", "Roaming", "Basic"],
                            help="select which agent to run",
-                           default="Behavior")
+                           default="Roaming")
     argparser.add_argument(
         '-s', '--seed',
         help='Set seed for repeating executions (default: None)',
         default=None,
         type=int)
+    argparser.add_argument(
+        '--car',
+        help='Set the car blueprint',
+        default='vehicle.tesla.model3',
+        type=str)
 
     args = argparser.parse_args()
 
@@ -842,5 +981,38 @@ def main():
         print('\nCancelled by user. Bye!')
 
 
+def push_to_db():
+    MONGO_CLIENT = MongoClient(
+        "mongodb+srv://admin:adminuser@281avcloud.cspsm.mongodb.net/myFirstDatabase?retryWrites=true&w=majority")
+    sensor_db = MONGO_CLIENT["SensorData"]
+    sensor_collection = sensor_db["Sensor"]
+    time.sleep(5)
+
+    while True:
+        try:
+            global prev_tick
+            current_tick = time.time()
+            time_taken = current_tick - prev_tick
+            global distance_travelled, cost_accumulated
+            distance_travelled += global_speed * 0.277778 * time_taken
+            cost_accumulated += 0.0005 * distance_travelled
+            sensor_data = data_queue.get()
+            d = sensor_data.get("trip_details")
+            d["trip_distance"] = format(distance_travelled, "0.2f")
+            d["trip_cost"] = format(cost_accumulated, "0.2f")
+            prev_tick = current_tick
+            sensor_data["trip_details"] = d
+            sensor_collection.insert_one(sensor_data)
+            print("Posting data to MongoDB...")
+        except Exception as e:
+            print("Error occurred while posting sensor data", e)
+    print("Successfully posted the sensor data to MongoDB")
+
+
+game_thread = threading.Thread(target=main)
+io_thread = threading.Thread(target=push_to_db)
+
 if __name__ == '__main__':
-    main()
+    game_thread.start()
+    io_thread.start()
+    sys.exit(0)
