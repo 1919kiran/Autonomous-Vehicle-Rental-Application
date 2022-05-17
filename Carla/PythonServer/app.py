@@ -14,7 +14,7 @@ def hello_world():
         vehicle = request.args.get('vehicle')
         payment = request.args.get('payment')
         os.system(
-            "start cmd /K python C:\carla\av-cloud-rental\Carla\PythonClient\examples\automatic_control.py --car "
+            "start cmd /K python C:\\carla\\av-cloud-rental\\Carla\\PythonClient\\av_launcher.py --car "
             + '"' + vehicle + '"')
         print(request.args)
         data = {
@@ -40,4 +40,4 @@ def hello():
 
 if __name__ == '__main__':
     CORS(app)
-    app.run(host="0.0.0.0", port=5500)
+    app.run(host="0.0.0.0", port=5401)
